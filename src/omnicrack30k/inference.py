@@ -1,5 +1,6 @@
 import cv2
 import torch
+import torch_npu
 import gdown
 import zipfile
 import numpy as np
@@ -14,13 +15,21 @@ from nnunetv2.inference.predict_from_raw_data import nnUNetPredictor
 class OmniCrack30kModel:
     def __init__(self, planpath=None, folds=(0,1,2,4), allow_tqdm=True,
                  url="https://drive.google.com/uc?id=15S1dvjr7050kISlQ0JTiEPA1eeUDfoOl"):
+        # Force Ascend NPU execution and fail fast when NPU is unavailable.
+        if not torch.npu.is_available():
+            raise RuntimeError("Ascend NPU is required but not available")
+
+        # Treat NPU as a CUDA-equivalent accelerator target for nnUNet inference.
+        device = torch.device('npu:0')
+
         # instantiate the nnUNetPredictor
         self.predictor = nnUNetPredictor(
             tile_step_size=0.5,
             use_gaussian=True,
             use_mirroring=True,
-            perform_everything_on_device=True,
-            device=torch.device('cuda', 0) if torch.cuda.is_available() else torch.device('cpu'),
+            # Keep all operations on the selected accelerator device.
+            perform_everything_on_device=device.type in ("cuda", "npu"),
+            device=device,
             verbose=False,
             verbose_preprocessing=False,
             allow_tqdm=allow_tqdm,
